@@ -1,2 +1,3 @@
-package com.test.aieserver.domain.answer;public class Answer {
+package com.test.aieserver.domain.answer;
+public class Answer {
 }

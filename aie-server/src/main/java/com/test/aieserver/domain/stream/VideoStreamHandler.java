@@ -1,8 +1,12 @@
-package com.test.aieserver;
+package com.test.aieserver.domain.stream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.test.aieserver.domain.answer.service.AnswerService;
+import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.kurento.client.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -11,19 +15,23 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.BufferedOutputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
+@RequiredArgsConstructor
 public class VideoStreamHandler extends TextWebSocketHandler {
-    private ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private KurentoClient kurento;
-    private Map<String, MediaPipeline> pipelines = new ConcurrentHashMap<>();
-    private Map<String, WebRtcEndpoint> webRtcEndpoints = new ConcurrentHashMap<>();
-    private Map<String, RecorderEndpoint> recorderEndpoints = new ConcurrentHashMap<>();
+    private final Map<String, MediaPipeline> pipelines = new HashMap<>();
+    private final Map<String, WebRtcEndpoint> webRtcEndpoints = new HashMap<>();
+    private final Map<String, RecorderEndpoint> recorderEndpoints = new HashMap<>();
+    private final AnswerService answerService;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -63,7 +71,6 @@ public class VideoStreamHandler extends TextWebSocketHandler {
                     log.info(stats.toString());
                 }
         );
-
     }
 
     @Override
@@ -77,7 +84,7 @@ public class VideoStreamHandler extends TextWebSocketHandler {
         if ("offer".equals(type)) {
             String sdpOffer = (String) msg.get("sdp");
             String sdpAnswer = webRtcEndpoint.processOffer(sdpOffer);
-            String json = String.format("{\"type\":\"answer\", \"sdpAnswer\":\"%s\"}", sdpAnswer.replace("\n", "\\n").replace("\r", "\\r"));
+            String json = String.format("{\"type\":\"answer\", \"sdpAnswer\":\"%s\", \"sessionId\":\"%s\"}", sdpAnswer.replace("\n", "\\n").replace("\r", "\\r"),sessionId);
             session.sendMessage(new TextMessage(json));
             webRtcEndpoint.gatherCandidates();
             log.info("Processed offer and gathered candidates for session ID: {}", sessionId);
@@ -87,13 +94,18 @@ public class VideoStreamHandler extends TextWebSocketHandler {
             String sdpMid = (String) msg.get("sdpMid");
             IceCandidate iceCandidate = new IceCandidate(candidate, sdpMid, sdpMLineIndex);
             webRtcEndpoint.addIceCandidate(iceCandidate);
+
             log.info("ICE candidate added for session ID: {}", sessionId);
         } else if ("start".equals(command)) {
             startRecording(sessionId);
+
         } else if ("stop".equals(command)) {
             stopRecording(sessionId);
-        } else if ("chat".equals(command))  {
+            String answer = answerService.requestWithAnswer(sessionId);
 
+            sendMsg(session,answer);
+            log.info("Stop msg response");
+        } else if ("chat".equals(command))  {
         }
     }
 
@@ -153,7 +165,9 @@ public class VideoStreamHandler extends TextWebSocketHandler {
             log.warn("Recorder Endpoint is not initialized for session ID: {}", sessionId);
         }
     }
-    public void sendMsg(String msg) {
-
+    public void sendMsg(WebSocketSession session,String msg) throws IOException {
+        String json = String.format("{\"type\":\"chat\", \"message\":\"%s\"}",msg);
+        log.info(json);
+        session.sendMessage(new TextMessage(json));
     }
 }

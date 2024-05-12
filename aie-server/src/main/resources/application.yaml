@@ -1,1 +1,24 @@
-server.port=8080
+spring:
+  mvc:
+    path match:
+      matching-strategy: ant_path_matcher
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/aie
+    username: aie
+    password: aie
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    show-sql: true
+    database: mysql
+    properties:
+      hibernate:
+        format_sql: true
+
+openai:
+  api:
+    key: "aie-openai-key.txt"
+google-credential-json: "aie-speech-to-text.json"

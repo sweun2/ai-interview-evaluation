@@ -1,5 +1,6 @@
-package com.test.aieserver;
+package com.test.aieserver.domain.stt;
 
+import com.test.aieserver.domain.stt.SpeechToTextService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.io.IOException;
 
 @Slf4j
@@ -23,7 +25,7 @@ public class SttRestController {
     @PostMapping(value = "/audio", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<String> handleAudioMessage(@RequestParam("audioFile") MultipartFile audioFile) throws IOException, IOException {
 
-        String transcribe = sttService.transcribe(audioFile);
+        String transcribe = sttService.transcribe((File) audioFile);
 
         return ResponseEntity.ok().body(transcribe);
     }

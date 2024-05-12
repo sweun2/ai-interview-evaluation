@@ -7,16 +7,18 @@ services:
     ports:
       - "3306:3306"
     environment:
-      MYSQL_DATABASE: focuz
-      MYSQL_ROOT_PASSWORD: focuz
-      MYSQL_USER: focuz
-      MYSQL_PASSWORD: focuz
-    platform: linux/x86_64
-  redis:
-    image: redis:alpine
-    command: redis-server --port 6379  # 실제 배포시 비밀번호 사용
-    labels:
-      - "name=redis"
-      - "mode=standalone"
+      MYSQL_DATABASE: aie
+      MYSQL_ROOT_PASSWORD: aie
+      MYSQL_USER: aie
+      MYSQL_PASSWORD: aie
+  kurento:
+    image: kurento/kurento-media-server:latest
+    container_name: kurento_media_server
     ports:
-      - "6379:6379"
+      - "8888:8888"
+    environment:
+      - KMS_MIN_PORT=20000
+      - KMS_MAX_PORT=30000
+      - GST_DEBUG=Kurento*:5  # 디버그 레벨 설정
+    volumes:
+      - ./video/:/var/lib/kurento/
