@@ -30,49 +30,50 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
   bool _isStreaming = false;
   final TextEditingController _textController = TextEditingController();
   final List<String> _messages = [];
-  String _statusMessage = "Loading..."; 
+  String _statusMessage = "Loading...";
   String _sessionId = "";
+  String _questionType = "text"; 
 
   @override
   void initState() {
-  super.initState();
-  _localRenderer.initialize();
-  _channel.stream.listen(onMessage, onError: onError, onDone: onDone);
+    super.initState();
+    _localRenderer.initialize();
+    _channel.stream.listen(onMessage, onError: onError, onDone: onDone);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _promptStartStreaming();
-      fetchStatusMessage(_sessionId);
     });
   }
 
   Future<void> fetchStatusMessage(String sessionId) async {
-  var response = await http.post(
-    Uri.parse('http://localhost:8080/question/rand/$sessionId'),
-    headers: <String, String>{
-      'Content-Type': 'application/json; charset=UTF-8',
-    },
-  );
+    var response = await http.post(
+      Uri.parse('http://localhost:8080/question/rand/$sessionId'),
+      headers: <String, String>{
+        'Content-Type': 'application/json; charset=UTF-8',
+      },
+    );
 
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    setState(() {
-      _statusMessage = data['question'];
-    });
-  } else {
-    setState(() {
-      _statusMessage = "Failed to fetch data";
-    });
+    if (response.statusCode == 200) {
+      var body = utf8.decode(response.bodyBytes);
+      var data = jsonDecode(body);
+      setState(() {
+        _statusMessage = data['question'];
+        _questionType = data['type']; // Assuming 'type' field indicates the question type
+        _textController.clear();
+        _messages.clear();
+      });
+    } else {
+      setState(() {
+        _statusMessage = "Failed to fetch data";
+      });
+    }
   }
-}
-
-
 
   void _promptStartStreaming() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       showDialog(
         context: context,
-        barrierDismissible: false, 
+        barrierDismissible: false,
         builder: (context) => AlertDialog(
           title: const Text("면접을 시작합니다."),
           content: const Text("시작과 동시에 캠이 녹화됩니다. 주어지는 질문에 답변하세요."),
@@ -84,12 +85,6 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
               },
               child: const Text("Start"),
             ),
-            /*TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text("No"),
-            ),*/
           ],
         ),
       );
@@ -97,114 +92,123 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
   }
 
   @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(title: const Text('AI Interview Evaluation')),
-    body: Row(
-      children: [
-        Expanded(
-          flex: 1613,
-          child: Column(
-            children: [
-              Expanded(
-                flex: 1,
-                child: Container(
-                  color: Colors.blueGrey[900],
-                  child: Center(
-                    child: Text(
-                      _statusMessage,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('AI Interview Evaluation')),
+      body: Row(
+        children: [
+          Expanded(
+            flex: 1613,
+            child: Column(
+              children: [
+                Expanded(
+                  flex: 1,
+                  child: Container(
+                    color: Colors.blueGrey[900],
+                    child: Center(
+                      child: Text(
+                        _statusMessage,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              Expanded(
-                flex: 4,
-                child: RTCVideoView(_localRenderer),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: ElevatedButton(
-                  onPressed: _isStreaming ? _stopStreaming : _startStreaming,
-                  child: Text(_isStreaming ? 'Stop Streaming' : 'Start Streaming'),
+                Expanded(
+                  flex: 4,
+                  child: _questionType == '음성'
+                      ? RTCVideoView(_localRenderer)
+                      : const Center(
+                          child: Text(
+                            "주관식입니다. 채팅창에 답변을 입력하세요",
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          ),
+                        ),
                 ),
-              ),
-            ],
+                if (_questionType == '음성')
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: ElevatedButton(
+                      onPressed: _isStreaming ? _stopStreaming : _startStreaming,
+                      child: Text(_isStreaming ? '문제 제출' : '다음 문제'),
+                    ),
+                  ),
+              ],
+            ),
           ),
-        ),
-        Expanded(
-          flex: 1000,
-          child: Column(
-            children: [
-              ElevatedButton(
-                onPressed: () => fetchStatusMessage(_sessionId),  // "다음 문제" 버튼 클릭 이벤트
-                child: const Text("다음 문제"),
-              ),
-              Expanded(
-                child: Container(
-                  color: Colors.grey[200],
-                  child: ListView.builder(
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) => ListTile(
-                      title: Text(_messages[index]),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 2.0),
+          Expanded(
+            flex: 1000,
+            child: Column(
+              children: [
+                Expanded(
+                  child: Container(
+                    color: Colors.grey[200],
+                    child: ListView.builder(
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) => ListTile(
+                        title: Text(_messages[index]),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 2.0),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: TextField(
-                  controller: _textController,
-                  decoration: InputDecoration(
-                    labelText: 'Send a message',
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.send),
-                      onPressed: _sendMessage,
+                if (_questionType != '음성')
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: TextField(
+                      controller: _textController,
+                      decoration: InputDecoration(
+                        labelText: 'Send a message',
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.send),
+                          onPressed: _sendMessage,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 
   void onMessage(message) {
     var decodedMessage = json.decode(message);
     switch (decodedMessage['type']) {
-        case 'answer':
-            _handleSDPAnswer(decodedMessage['sdpAnswer']).then((_) {
-                setState(() {
-                    _sessionId = decodedMessage['sessionId'];
-                });
-                fetchStatusMessage(_sessionId);
-            });
-            break;
-        case 'candidate':
-            _handleRemoteCandidate(decodedMessage);
-            break;
-        case 'chat':
-            setState(() {
-                print(decodedMessage['message']);
-                _messages.add(decodedMessage['message']);
-            });
-            break;
-        default:
-            break;
+      case 'answer':
+        _handleSDPAnswer(decodedMessage['sdpAnswer']).then((_) {
+          setState(() {
+            _sessionId = decodedMessage['sessionId'];
+          });
+          fetchStatusMessage(_sessionId);
+        });
+        break;
+      case 'candidate':
+        _handleRemoteCandidate(decodedMessage);
+        break;
+      case 'chat':
+        setState(() {
+          print(decodedMessage['message']);
+          _messages.add(decodedMessage['message']);
+        });
+        break;
+      default:
+        break;
     }
-}
+  }
 
+  void onError(error) {
+    print('Error: $error'); // Debugging statement
+  }
 
-  void onError(error) {}
-  void onDone() {}
+  void onDone() {
+    print('WebSocket connection closed'); // Debugging statement
+  }
 
   void _sendMessage() {
     if (_textController.text.isNotEmpty) {
@@ -217,9 +221,9 @@ Widget build(BuildContext context) {
   }
 
   Future<void> _handleSDPAnswer(String sdpAnswer) async {
-  RTCSessionDescription description = RTCSessionDescription(sdpAnswer, 'answer');
-  await _peerConnection!.setRemoteDescription(description);
-  _channel.sink.add(json.encode({'command': 'start'}));
+    RTCSessionDescription description = RTCSessionDescription(sdpAnswer, 'answer');
+    await _peerConnection!.setRemoteDescription(description);
+    _channel.sink.add(json.encode({'command': 'start'}));
   }
 
   void _handleRemoteCandidate(Map<String, dynamic> candidateMap) {
@@ -231,59 +235,65 @@ Widget build(BuildContext context) {
     _peerConnection!.addCandidate(candidate);
   }
 
-  void _startStreaming() async {
-    final Map<String, dynamic> configuration = {
-      'iceServers': [{'url': 'stun:stun.l.google.com:19302'}]
-    };
-    final Map<String, dynamic> constraints = {
-      'mandatory': {
-        'OfferToReceiveAudio': false,
-        'OfferToReceiveVideo': true
-      },
-      'optional': [],
-    };
-    _peerConnection = await createPeerConnection(configuration, constraints);
-    _localStream = await navigator.mediaDevices.getUserMedia({
-      'audio': true,
-      'video': {'facingMode': 'user'}
-    });
-    _peerConnection!.addStream(_localStream!);
-    _localRenderer.srcObject = _localStream;
-    RTCSessionDescription description = await _peerConnection!.createOffer(constraints);
-    await _peerConnection!.setLocalDescription(description);
+void _startStreaming() async {
+  // Initialize peer connection
+  final Map<String, dynamic> configuration = {
+    'iceServers': [{'url': 'stun:stun.l.google.com:19302'}]
+  };
+  final Map<String, dynamic> constraints = {
+    'mandatory': {
+      'OfferToReceiveAudio': false,
+      'OfferToReceiveVideo': true
+    },
+    'optional': [],
+  };
+  _peerConnection = await createPeerConnection(configuration, constraints);
+  _localStream = await navigator.mediaDevices.getUserMedia({
+    'audio': true,
+    'video': {'facingMode': 'user'}
+  });
+  _peerConnection!.addStream(_localStream!);
+  _localRenderer.srcObject = _localStream;
+  RTCSessionDescription description = await _peerConnection!.createOffer(constraints);
+  await _peerConnection!.setLocalDescription(description);
 
-    _peerConnection!.onIceCandidate = (candidate) {
-      _channel.sink.add(json.encode({
-        'type': 'candidate',
-        'candidate': candidate.candidate,
-        'sdpMid': candidate.sdpMid,
-        'sdpMLineIndex': candidate.sdpMLineIndex
-      }));
-    };
-
+  _peerConnection!.onIceCandidate = (candidate) {
     _channel.sink.add(json.encode({
-      'type': 'offer',
-      'sdp': description.sdp
+      'type': 'candidate',
+      'candidate': candidate.candidate,
+      'sdpMid': candidate.sdpMid,
+      'sdpMLineIndex': candidate.sdpMLineIndex
     }));
+  };
 
-    setState(() {
-      _isStreaming = true;
-    });
-  }
+  _channel.sink.add(json.encode({
+    'type': 'offer',
+    'sdp': description.sdp
+  }));
 
+  setState(() {
+    _isStreaming = true;
+
+  });
+
+  fetchStatusMessage(_sessionId);
+}
   void _stopStreaming() {
-    _localRenderer.srcObject = null;
-    _localStream?.getTracks().forEach((track) {
-      track.stop();
-    });
-    _localStream?.dispose();
-    _peerConnection?.close();
-    _channel.sink.add(json.encode({
-      'command': 'stop'
-    }));
-    setState(() {
-      _isStreaming = false;
-    });
+  _localRenderer.srcObject = null;
+  _localStream?.getTracks().forEach((track) {
+    track.stop();
+  });
+  _localStream?.dispose();
+
+
+  // Send a stop command without closing the WebSocket channel
+  _channel.sink.add(json.encode({
+    'command': 'stop'
+  }));
+
+  setState(() {
+    _isStreaming = false;
+  });
   }
 
   @override

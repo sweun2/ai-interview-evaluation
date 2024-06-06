@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class QuestionController {
     private final QuestionService questionService;
-
     @PostMapping("/rand/{sessionId}")
     public ResponseEntity<QuestionResponseDto.QuestionInfo> getNewQuestion(@PathVariable String sessionId) {
         return ResponseEntity.ok(QuestionResponseDto.QuestionInfo.of(questionService.constructRandQuestion(sessionId)));

@@ -81,33 +81,42 @@ public class VideoStreamHandler extends TextWebSocketHandler {
         RecorderEndpoint recorderEndpoint = recorderEndpoints.get(sessionId);
         String command = (String) msg.get("command");
         String type = (String) msg.get("type");
+
         if ("offer".equals(type)) {
+            if (webRtcEndpoint == null) {
+                MediaPipeline pipeline = pipelines.get(sessionId);
+                webRtcEndpoint = new WebRtcEndpoint.Builder(pipeline).build();
+                setupWebRtcEventListeners(webRtcEndpoint);
+                webRtcEndpoints.put(sessionId, webRtcEndpoint);
+            }
             String sdpOffer = (String) msg.get("sdp");
             String sdpAnswer = webRtcEndpoint.processOffer(sdpOffer);
-            String json = String.format("{\"type\":\"answer\", \"sdpAnswer\":\"%s\", \"sessionId\":\"%s\"}", sdpAnswer.replace("\n", "\\n").replace("\r", "\\r"),sessionId);
+            String json = String.format("{\"type\":\"answer\", \"sdpAnswer\":\"%s\", \"sessionId\":\"%s\"}", sdpAnswer.replace("\n", "\\n").replace("\r", "\\r"), sessionId);
             session.sendMessage(new TextMessage(json));
             webRtcEndpoint.gatherCandidates();
             log.info("Processed offer and gathered candidates for session ID: {}", sessionId);
         } else if ("candidate".equals(type)) {
-            String candidate = (String) msg.get("candidate");
-            int sdpMLineIndex = (Integer) msg.get("sdpMLineIndex");
-            String sdpMid = (String) msg.get("sdpMid");
-            IceCandidate iceCandidate = new IceCandidate(candidate, sdpMid, sdpMLineIndex);
-            webRtcEndpoint.addIceCandidate(iceCandidate);
-
-            log.info("ICE candidate added for session ID: {}", sessionId);
+            if (webRtcEndpoint != null) {
+                String candidate = (String) msg.get("candidate");
+                int sdpMLineIndex = (Integer) msg.get("sdpMLineIndex");
+                String sdpMid = (String) msg.get("sdpMid");
+                IceCandidate iceCandidate = new IceCandidate(candidate, sdpMid, sdpMLineIndex);
+                webRtcEndpoint.addIceCandidate(iceCandidate);
+                log.info("ICE candidate added for session ID: {}", sessionId);
+            }
         } else if ("start".equals(command)) {
             startRecording(sessionId);
-
         } else if ("stop".equals(command)) {
             stopRecording(sessionId);
             String answer = answerService.requestWithAnswer(sessionId);
-
-            sendMsg(session,answer);
+            sendMsg(session, answer);
             log.info("Stop msg response");
-        } else if ("chat".equals(command))  {
+        } else if ("chat".equals(command)) {
+            String messageText = (String) msg.get("message");
+            log.info("Chat message received: {}", messageText);
         }
     }
+
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {

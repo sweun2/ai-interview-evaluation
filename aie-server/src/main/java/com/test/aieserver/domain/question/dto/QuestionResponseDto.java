@@ -11,10 +11,12 @@ public class QuestionResponseDto {
     @AllArgsConstructor
     public static class QuestionInfo {
         private String question;
+        private String type;
 
         public static QuestionInfo of(Question question) {
             return QuestionInfo.builder()
                     .question(question.getQuestionContent())
+                    .type(question.getQuestionType().getType())
                     .build();
         }
     }
