@@ -2,26 +2,17 @@ package com.test.aieserver.domain.stream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.test.aieserver.domain.answer.service.AnswerService;
-import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.kurento.client.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
-import java.io.BufferedOutputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -108,15 +99,17 @@ public class VideoStreamHandler extends TextWebSocketHandler {
             startRecording(sessionId);
         } else if ("stop".equals(command)) {
             stopRecording(sessionId);
-            String answer = answerService.requestWithAnswer(sessionId);
+            String answer = answerService.requestWithVideoFile(sessionId);
             sendMsg(session, answer);
             log.info("Stop msg response");
-        } else if ("chat".equals(command)) {
+        } else if ("chat".equals(type)) {
             String messageText = (String) msg.get("message");
             log.info("Chat message received: {}", messageText);
+            String answer = answerService.requestWithText(messageText, sessionId);
+            sendMsg(session, answer);
+            log.info("Chat msg response");
         }
     }
-
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
@@ -147,9 +140,7 @@ public class VideoStreamHandler extends TextWebSocketHandler {
         RecorderEndpoint recorderEndpoint = new RecorderEndpoint.Builder(pipeline, outputFile)
                 .withMediaProfile(MediaProfileSpecType.WEBM).build();
 
-        recorderEndpoint.addErrorListener(event -> {
-            log.error("Recorder error: {}", event.getDescription());
-        });
+        recorderEndpoint.addErrorListener(event -> log.error("Recorder error: {}", event.getDescription()));
 
 
         webRtcEndpoint.connect(recorderEndpoint,MediaType.VIDEO);
@@ -157,12 +148,8 @@ public class VideoStreamHandler extends TextWebSocketHandler {
 
         recorderEndpoints.put(sessionId, recorderEndpoint);
 
-        if (recorderEndpoint != null) {
-            recorderEndpoint.record();
-            log.info("Recording started for session ID: {}", sessionId);
-        } else {
-            log.warn("WebRTC or Recorder Endpoint is not initialized for session ID: {}", sessionId);
-        }
+        recorderEndpoint.record();
+        log.info("Recording started for session ID: {}", sessionId);
     }
 
     public void stopRecording(String sessionId) {

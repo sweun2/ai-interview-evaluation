@@ -1,9 +1,9 @@
 package com.test.aieserver.domain.answer.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.test.aieserver.domain.answer.dto.OpenAIResponse;
 import com.test.aieserver.domain.question.Question;
 import com.test.aieserver.domain.question.repository.QuestionRepository;
-import com.test.aieserver.domain.stream.VideoStreamHandler;
 import com.test.aieserver.domain.stt.SpeechToTextService;
 import com.test.aieserver.domain.user.User;
 import com.test.aieserver.domain.user.repository.UserRepository;
@@ -22,7 +22,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Collections;
-import java.util.UUID;
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 @Transactional
@@ -40,13 +41,17 @@ public class AnswerService {
         return new String(Files.readAllBytes(apiKey.getFile().toPath())).trim();
     }
 
-    public String requestWithAnswer(String sessionId) throws IOException {
+    public String requestWithVideoFile(String sessionId) throws IOException {
         File videoFile = new File("./video/"+sessionId+".webm");
         String transcribeText = speechToTextService.transcribe(videoFile);
         log.info("transcribed text : {}",transcribeText);
 
         return requestToOpenAI(transcribeText,sessionId);
     }
+    public String requestWithText(String text,String sessionId) throws IOException {
+        return requestToOpenAI(text,sessionId);
+    }
+
     public String requestToOpenAI(String reqMsg,String sessionId) throws IOException {
         RestTemplate restTemplate = new RestTemplate();
         log.info("apiKey ; {}",getApiKey());
@@ -80,10 +85,27 @@ public class AnswerService {
         return result;
     }
 
-    private static HttpEntity<String> getStringHttpEntity(String reqMsg, UserQuestion userQuestion, HttpHeaders headers) {
+    private static HttpEntity<String> getStringHttpEntity(String reqMsg, UserQuestion userQuestion, HttpHeaders headers) throws IOException {
         Question question = userQuestion.getQuestion();
-        String requestBody = String.format("{\"model\":\"gpt-3.5-turbo\",\"messages\":[{\"role\":\"user\",\"content\":\"질문이 '%s' 이고 답변은 '%s' 일 때, 답변을 잘한건지 평가해줘. 답변이 100점 만점 기준으로 몇 점인지 정확하게 표현해주고, 그 이유도 설명해줘. 내가 한 답변 - 점수, 이유 순으로 적어줘. 만약 답변이 정상적이지 않다면, '답변이 불충분합니다' 라고 출력해줘.\"}]}", question.getQuestionContent(), reqMsg);
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        Map<String, Object> requestBodyMap = new HashMap<>();
+        requestBodyMap.put("model", "gpt-3.5-turbo");
+
+        Map<String, String> systemMessage = new HashMap<>();
+        systemMessage.put("role", "system");
+        systemMessage.put("content", "You are a highly knowledgeable interview evaluator. Your task is to evaluate interview answers based on their quality, relevance, and completeness.");
+
+        Map<String, String> userMessage = new HashMap<>();
+        userMessage.put("role", "user");
+        userMessage.put("content", String.format("질문: '%s'.\n응답: '%s'.\n\n이 응답이 질문에 얼마나 잘 대답했는지 평가해줘. 다음 기준에 따라 100점 만점 기준으로 점수를 매겨줘: 1) 답변의 정확성, 2) 답변의 관련성, 3) 답변의 완전성. 점수를 매긴 후, 각 기준에 대한 평가 이유를 설명해줘.\n\n형식:\n점수: [점수]\n이유:\n1) 정확성: [설명]\n2) 관련성: [설명]\n3) 완전성: [설명]\n만약 답변이 정상적이지 않다면, '답변이 불충분합니다' 라고 출력해줘.", question.getQuestionContent(), reqMsg));
+
+        requestBodyMap.put("messages", new Object[]{systemMessage, userMessage});
+
+        String requestBody = objectMapper.writeValueAsString(requestBodyMap);
 
         return new HttpEntity<>(requestBody, headers);
     }
+
+
 }

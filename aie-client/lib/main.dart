@@ -28,11 +28,13 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
   MediaStream? _localStream;
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   bool _isStreaming = false;
+  bool _showNextQuestionButton = false;
+  bool _isLoading = false;
   final TextEditingController _textController = TextEditingController();
   final List<String> _messages = [];
   String _statusMessage = "Loading...";
   String _sessionId = "";
-  String _questionType = "text"; 
+  String _questionType = "text";
 
   @override
   void initState() {
@@ -95,83 +97,117 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('AI Interview Evaluation')),
-      body: Row(
+      body: Stack(
         children: [
-          Expanded(
-            flex: 1613,
-            child: Column(
-              children: [
-                Expanded(
-                  flex: 1,
-                  child: Container(
-                    color: Colors.blueGrey[900],
-                    child: Center(
-                      child: Text(
-                        _statusMessage,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 4,
-                  child: _questionType == '음성'
-                      ? RTCVideoView(_localRenderer)
-                      : const Center(
+          Row(
+            children: [
+              Expanded(
+                flex: 1613,
+                child: Column(
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: Container(
+                        color: Colors.blueGrey[900],
+                        child: Center(
                           child: Text(
-                            "주관식입니다. 채팅창에 답변을 입력하세요",
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            _statusMessage,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                ),
-                if (_questionType == '음성')
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: ElevatedButton(
-                      onPressed: _isStreaming ? _stopStreaming : _startStreaming,
-                      child: Text(_isStreaming ? '문제 제출' : '다음 문제'),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          Expanded(
-            flex: 1000,
-            child: Column(
-              children: [
-                Expanded(
-                  child: Container(
-                    color: Colors.grey[200],
-                    child: ListView.builder(
-                      itemCount: _messages.length,
-                      itemBuilder: (context, index) => ListTile(
-                        title: Text(_messages[index]),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 2.0),
                       ),
                     ),
-                  ),
+                    Expanded(
+                      flex: 4,
+                      child: _questionType == '음성'
+                          ? RTCVideoView(_localRenderer)
+                          : const Center(
+                              child: Text(
+                                "주관식입니다. 채팅창에 답변을 입력하세요",
+                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: ElevatedButton(
+                        onPressed: _isStreaming ? _stopStreaming : _startStreaming,
+                        child: Text(_isStreaming ? '문제 제출' : '다음 문제'),
+                      ),
+                    ),
+                  ],
                 ),
-                if (_questionType != '음성')
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: TextField(
-                      controller: _textController,
-                      decoration: InputDecoration(
-                        labelText: 'Send a message',
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.send),
-                          onPressed: _sendMessage,
+              ),
+              Expanded(
+                flex: 1000,
+                child: Column(
+                  children: [
+                    if (_showNextQuestionButton)
+                      ElevatedButton(
+                        onPressed: () => fetchStatusMessage(_sessionId),
+                        child: const Text("다음 문제"),
+                      ),
+                    Expanded(
+                      child: Container(
+                        color: Colors.grey[200],
+                        child: ListView.builder(
+                          itemCount: _messages.length,
+                          itemBuilder: (context, index) => ListTile(
+                            title: Text(_messages[index]),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 2.0),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
-            ),
+                    if (_questionType != '음성')
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _textController,
+                                minLines: 1,
+                                maxLines: null,
+                                decoration: InputDecoration(
+                                  labelText: 'Send a message',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.send),
+                              onPressed: _sendMessage,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
+          if (_isLoading)
+            Container(
+              color: Colors.black54,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    const Text(
+                      "평가중입니다...",
+                      style: TextStyle(fontSize: 20, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -184,6 +220,7 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
         _handleSDPAnswer(decodedMessage['sdpAnswer']).then((_) {
           setState(() {
             _sessionId = decodedMessage['sessionId'];
+            _isLoading = false; // 평가 결과가 오면 로딩 상태를 해제합니다.
           });
           fetchStatusMessage(_sessionId);
         });
@@ -212,11 +249,18 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
 
   void _sendMessage() {
     if (_textController.text.isNotEmpty) {
+      setState(() {
+        _messages.add("나: " + _textController.text);
+        _isLoading = true; // 메시지를 보내면 로딩 상태로 설정합니다.
+      });
       _channel.sink.add(json.encode({
         'type': 'chat',
         'message': _textController.text,
       }));
       _textController.clear();
+      setState(() {
+        _showNextQuestionButton = true;
+      });
     }
   }
 
@@ -235,65 +279,64 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
     _peerConnection!.addCandidate(candidate);
   }
 
-void _startStreaming() async {
-  // Initialize peer connection
-  final Map<String, dynamic> configuration = {
-    'iceServers': [{'url': 'stun:stun.l.google.com:19302'}]
-  };
-  final Map<String, dynamic> constraints = {
-    'mandatory': {
-      'OfferToReceiveAudio': false,
-      'OfferToReceiveVideo': true
-    },
-    'optional': [],
-  };
-  _peerConnection = await createPeerConnection(configuration, constraints);
-  _localStream = await navigator.mediaDevices.getUserMedia({
-    'audio': true,
-    'video': {'facingMode': 'user'}
-  });
-  _peerConnection!.addStream(_localStream!);
-  _localRenderer.srcObject = _localStream;
-  RTCSessionDescription description = await _peerConnection!.createOffer(constraints);
-  await _peerConnection!.setLocalDescription(description);
+  void _startStreaming() async {
+    // Initialize peer connection
+    final Map<String, dynamic> configuration = {
+      'iceServers': [{'url': 'stun:stun.l.google.com:19302'}]
+    };
+    final Map<String, dynamic> constraints = {
+      'mandatory': {
+        'OfferToReceiveAudio': false,
+        'OfferToReceiveVideo': true
+      },
+      'optional': [],
+    };
+    _peerConnection = await createPeerConnection(configuration, constraints);
+    _localStream = await navigator.mediaDevices.getUserMedia({
+      'audio': true,
+      'video': {'facingMode': 'user'}
+    });
+    _peerConnection!.addStream(_localStream!);
+    _localRenderer.srcObject = _localStream;
+    RTCSessionDescription description = await _peerConnection!.createOffer(constraints);
+    await _peerConnection!.setLocalDescription(description);
 
-  _peerConnection!.onIceCandidate = (candidate) {
+    _peerConnection!.onIceCandidate = (candidate) {
+      _channel.sink.add(json.encode({
+        'type': 'candidate',
+        'candidate': candidate.candidate,
+        'sdpMid': candidate.sdpMid,
+        'sdpMLineIndex': candidate.sdpMLineIndex
+      }));
+    };
+
     _channel.sink.add(json.encode({
-      'type': 'candidate',
-      'candidate': candidate.candidate,
-      'sdpMid': candidate.sdpMid,
-      'sdpMLineIndex': candidate.sdpMLineIndex
+      'type': 'offer',
+      'sdp': description.sdp
     }));
-  };
 
-  _channel.sink.add(json.encode({
-    'type': 'offer',
-    'sdp': description.sdp
-  }));
+    setState(() {
+      _isStreaming = true;
+    });
 
-  setState(() {
-    _isStreaming = true;
+    fetchStatusMessage(_sessionId);
+  }
 
-  });
-
-  fetchStatusMessage(_sessionId);
-}
   void _stopStreaming() {
-  _localRenderer.srcObject = null;
-  _localStream?.getTracks().forEach((track) {
-    track.stop();
-  });
-  _localStream?.dispose();
+    _localRenderer.srcObject = null;
+    _localStream?.getTracks().forEach((track) {
+      track.stop();
+    });
+    _localStream?.dispose();
 
+    // Send a stop command without closing the WebSocket channel
+    _channel.sink.add(json.encode({
+      'command': 'stop'
+    }));
 
-  // Send a stop command without closing the WebSocket channel
-  _channel.sink.add(json.encode({
-    'command': 'stop'
-  }));
-
-  setState(() {
-    _isStreaming = false;
-  });
+    setState(() {
+      _isStreaming = false;
+    });
   }
 
   @override
