@@ -67,7 +67,7 @@ public class AnswerService {
                 .orElseThrow(
                         () -> new RuntimeException("User not found")
                 );
-        UserQuestion userQuestion = userQuestionRepository.findByUser(user)
+        UserQuestion userQuestion = userQuestionRepository.findByHighestCnt(user.getId())
                 .orElseThrow(
                         () -> new RuntimeException("UserQuestion not found")
                 );
@@ -79,9 +79,8 @@ public class AnswerService {
         String result =  openAIResponse != null && !openAIResponse.getChoices().isEmpty()
                 ? openAIResponse.getChoices().get(0).getMessage().getContent()
                 : "No content received";
-        log.info(result);
+        log.info("result:{}", result);
 
-        userQuestionRepository.delete(userQuestion);
         return result;
     }
 
@@ -98,7 +97,7 @@ public class AnswerService {
 
         Map<String, String> userMessage = new HashMap<>();
         userMessage.put("role", "user");
-        userMessage.put("content", String.format("질문: '%s'.\n응답: '%s'.\n\n이 응답이 질문에 얼마나 잘 대답했는지 평가해줘. 다음 기준에 따라 100점 만점 기준으로 점수를 매겨줘: 1) 답변의 정확성, 2) 답변의 관련성, 3) 답변의 완전성. 점수를 매긴 후, 각 기준에 대한 평가 이유를 설명해줘.\n\n형식:\n점수: [점수]\n이유:\n1) 정확성: [설명]\n2) 관련성: [설명]\n3) 완전성: [설명]\n만약 답변이 정상적이지 않다면, '답변이 불충분합니다' 라고 출력해줘.", question.getQuestionContent(), reqMsg));
+        userMessage.put("content", String.format("질문: '%s'.\n응답: '%s'.\n\n이 응답이 질문에 얼마나 잘 대답했는지 평가해줘. 다음 기준에 따라 100점 만점 기준으로 점수를 매겨줘: 1) 답변의 정확성, 2) 답변의 관련성, 3) 답변의 완전성. 점수를 매긴 후, 각 기준에 대한 평가 이유를 설명해줘.\n\n형식:\n점수: [점수]\n이유:\n1) 정확성: [설명]\n2) 관련성: [설명]\n3) 완전성: [설명]\n만약 답변이 정상적이지 않다면, '답변이 불충분합니다' 라고 출력해줘.", question.getQuestionContent(), reqMsg.strip()));
 
         requestBodyMap.put("messages", new Object[]{systemMessage, userMessage});
 

@@ -48,6 +48,10 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
   }
 
   Future<void> fetchStatusMessage(String sessionId) async {
+    setState(() {
+      _isLoading = true;
+    });
+
     var response = await http.post(
       Uri.parse('http://localhost:8080/question/rand/$sessionId'),
       headers: <String, String>{
@@ -60,13 +64,15 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
       var data = jsonDecode(body);
       setState(() {
         _statusMessage = data['question'];
-        _questionType = data['type']; // Assuming 'type' field indicates the question type
+        _questionType = data['type'];
         _textController.clear();
         _messages.clear();
+        _isLoading = false;
       });
     } else {
       setState(() {
         _statusMessage = "Failed to fetch data";
+        _isLoading = false;
       });
     }
   }
@@ -132,13 +138,6 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
                               ),
                             ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: ElevatedButton(
-                        onPressed: _isStreaming ? _stopStreaming : _startStreaming,
-                        child: Text(_isStreaming ? '문제 제출' : '다음 문제'),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -146,10 +145,43 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
                 flex: 1000,
                 child: Column(
                   children: [
-                    if (_showNextQuestionButton)
-                      ElevatedButton(
-                        onPressed: () => fetchStatusMessage(_sessionId),
-                        child: const Text("다음 문제"),
+                    if (_questionType == '음성')
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: ElevatedButton(
+                          onPressed: _isStreaming ? _stopStreaming : () => fetchStatusMessage(_sessionId),
+                          style: ElevatedButton.styleFrom(
+                            foregroundColor: Colors.white, backgroundColor: Colors.blueGrey,
+                            textStyle: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(_isStreaming ? '문제 제출' : '다음 문제'),
+                        ),
+                      ),
+                    if (_questionType != '음성' || _showNextQuestionButton)
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: ElevatedButton(
+                          onPressed: () => fetchStatusMessage(_sessionId),
+                          style: ElevatedButton.styleFrom(
+                            foregroundColor: Colors.white, backgroundColor: Colors.blueGrey,
+                            textStyle: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('다음 문제'),
+                        ),
                       ),
                     Expanded(
                       child: Container(
@@ -173,14 +205,16 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
                                 controller: _textController,
                                 minLines: 1,
                                 maxLines: null,
-                                decoration: InputDecoration(
-                                  labelText: 'Send a message',
+                                decoration: const InputDecoration(
+                                  labelText: '답변을 입력하세요',
                                   border: OutlineInputBorder(),
                                 ),
+                                style: const TextStyle(fontSize: 16),
                               ),
                             ),
                             IconButton(
                               icon: const Icon(Icons.send),
+                              color: Colors.blueGrey,
                               onPressed: _sendMessage,
                             ),
                           ],
@@ -194,13 +228,13 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
           if (_isLoading)
             Container(
               color: Colors.black54,
-              child: Center(
+              child: const Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     CircularProgressIndicator(),
-                    const SizedBox(height: 16),
-                    const Text(
+                    SizedBox(height: 16),
+                    Text(
                       "평가중입니다...",
                       style: TextStyle(fontSize: 20, color: Colors.white),
                     ),
@@ -220,7 +254,6 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
         _handleSDPAnswer(decodedMessage['sdpAnswer']).then((_) {
           setState(() {
             _sessionId = decodedMessage['sessionId'];
-            _isLoading = false; // 평가 결과가 오면 로딩 상태를 해제합니다.
           });
           fetchStatusMessage(_sessionId);
         });
@@ -232,26 +265,36 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
         setState(() {
           print(decodedMessage['message']);
           _messages.add(decodedMessage['message']);
+          _isLoading = false;
         });
         break;
       default:
+        setState(() {
+          _isLoading = false;
+        });
         break;
     }
   }
 
   void onError(error) {
-    print('Error: $error'); // Debugging statement
+    print('Error: $error');
+    setState(() {
+      _isLoading = false;
+    });
   }
 
   void onDone() {
-    print('WebSocket connection closed'); // Debugging statement
+    print('WebSocket connection closed');
+    setState(() {
+      _isLoading = false;
+    });
   }
 
   void _sendMessage() {
     if (_textController.text.isNotEmpty) {
       setState(() {
-        _messages.add("나: " + _textController.text);
-        _isLoading = true; // 메시지를 보내면 로딩 상태로 설정합니다.
+        _messages.add("나: ${_textController.text}");
+        _isLoading = true;
       });
       _channel.sink.add(json.encode({
         'type': 'chat',
@@ -280,7 +323,6 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
   }
 
   void _startStreaming() async {
-    // Initialize peer connection
     final Map<String, dynamic> configuration = {
       'iceServers': [{'url': 'stun:stun.l.google.com:19302'}]
     };
@@ -323,13 +365,16 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
   }
 
   void _stopStreaming() {
+    setState(() {
+      _isLoading = true;
+    });
+
     _localRenderer.srcObject = null;
     _localStream?.getTracks().forEach((track) {
       track.stop();
     });
     _localStream?.dispose();
 
-    // Send a stop command without closing the WebSocket channel
     _channel.sink.add(json.encode({
       'command': 'stop'
     }));

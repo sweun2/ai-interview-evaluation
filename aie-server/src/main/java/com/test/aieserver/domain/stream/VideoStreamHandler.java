@@ -30,18 +30,19 @@ public class VideoStreamHandler extends TextWebSocketHandler {
             kurento = KurentoClient.create();
             log.info("Kurento client created");
         }
-        MediaPipeline pipeline = kurento.createMediaPipeline();
-        WebRtcEndpoint webRtcEndpoint = new WebRtcEndpoint.Builder(pipeline).build();
-
-
-        setupWebRtcEventListeners(webRtcEndpoint);
         String sessionId = session.getId();
-        pipelines.put(sessionId, pipeline);
-        webRtcEndpoints.put(sessionId, webRtcEndpoint);
-
-        session.getAttributes().put("webRtcEndpoint", webRtcEndpoint);
+        createNewPipelineAndEndpoint(sessionId);
         log.info("Media pipeline and WebRTC endpoint created for session ID: {}", sessionId);
     }
+
+    private void createNewPipelineAndEndpoint(String sessionId) {
+        MediaPipeline pipeline = kurento.createMediaPipeline();
+        WebRtcEndpoint webRtcEndpoint = new WebRtcEndpoint.Builder(pipeline).build();
+        setupWebRtcEventListeners(webRtcEndpoint);
+        pipelines.put(sessionId, pipeline);
+        webRtcEndpoints.put(sessionId, webRtcEndpoint);
+    }
+
     private void setupWebRtcEventListeners(WebRtcEndpoint webRtcEndpoint) {
         webRtcEndpoint.addIceCandidateFoundListener(event -> {
             IceCandidate candidate = event.getCandidate();
@@ -52,49 +53,22 @@ public class VideoStreamHandler extends TextWebSocketHandler {
             log.info("ICE gathering done");
         });
 
-
         webRtcEndpoint.addMediaStateChangedListener(event -> {
             log.info("Media state changed: {}", event.getNewState());
         });
-        webRtcEndpoint.getStats().forEach(
-                (s, stats) -> {
-                    log.info(s);
-                    log.info(stats.toString());
-                }
-        );
     }
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         Map msg = objectMapper.readValue(message.getPayload(), Map.class);
         String sessionId = session.getId();
-        WebRtcEndpoint webRtcEndpoint = webRtcEndpoints.get(sessionId);
-        RecorderEndpoint recorderEndpoint = recorderEndpoints.get(sessionId);
         String command = (String) msg.get("command");
         String type = (String) msg.get("type");
 
         if ("offer".equals(type)) {
-            if (webRtcEndpoint == null) {
-                MediaPipeline pipeline = pipelines.get(sessionId);
-                webRtcEndpoint = new WebRtcEndpoint.Builder(pipeline).build();
-                setupWebRtcEventListeners(webRtcEndpoint);
-                webRtcEndpoints.put(sessionId, webRtcEndpoint);
-            }
-            String sdpOffer = (String) msg.get("sdp");
-            String sdpAnswer = webRtcEndpoint.processOffer(sdpOffer);
-            String json = String.format("{\"type\":\"answer\", \"sdpAnswer\":\"%s\", \"sessionId\":\"%s\"}", sdpAnswer.replace("\n", "\\n").replace("\r", "\\r"), sessionId);
-            session.sendMessage(new TextMessage(json));
-            webRtcEndpoint.gatherCandidates();
-            log.info("Processed offer and gathered candidates for session ID: {}", sessionId);
+            handleOffer(session, sessionId, msg);
         } else if ("candidate".equals(type)) {
-            if (webRtcEndpoint != null) {
-                String candidate = (String) msg.get("candidate");
-                int sdpMLineIndex = (Integer) msg.get("sdpMLineIndex");
-                String sdpMid = (String) msg.get("sdpMid");
-                IceCandidate iceCandidate = new IceCandidate(candidate, sdpMid, sdpMLineIndex);
-                webRtcEndpoint.addIceCandidate(iceCandidate);
-                log.info("ICE candidate added for session ID: {}", sessionId);
-            }
+            handleCandidate(sessionId, msg);
         } else if ("start".equals(command)) {
             startRecording(sessionId);
         } else if ("stop".equals(command)) {
@@ -108,6 +82,37 @@ public class VideoStreamHandler extends TextWebSocketHandler {
             String answer = answerService.requestWithText(messageText, sessionId);
             sendMsg(session, answer);
             log.info("Chat msg response");
+        }
+    }
+
+    private void handleOffer(WebSocketSession session, String sessionId, Map msg) throws IOException {
+        WebRtcEndpoint webRtcEndpoint = webRtcEndpoints.get(sessionId);
+        if (webRtcEndpoint == null) {
+            createNewPipelineAndEndpoint(sessionId);
+            webRtcEndpoint = webRtcEndpoints.get(sessionId);
+        } else {
+            webRtcEndpoint.release(); // Release the existing WebRtcEndpoint
+            webRtcEndpoint = new WebRtcEndpoint.Builder(pipelines.get(sessionId)).build();
+            setupWebRtcEventListeners(webRtcEndpoint);
+            webRtcEndpoints.put(sessionId, webRtcEndpoint);
+        }
+        String sdpOffer = (String) msg.get("sdp");
+        String sdpAnswer = webRtcEndpoint.processOffer(sdpOffer);
+        String json = String.format("{\"type\":\"answer\", \"sdpAnswer\":\"%s\", \"sessionId\":\"%s\"}", sdpAnswer.replace("\n", "\\n").replace("\r", "\\r"), sessionId);
+        session.sendMessage(new TextMessage(json));
+        webRtcEndpoint.gatherCandidates();
+        log.info("Processed offer and gathered candidates for session ID: {}", sessionId);
+    }
+
+    private void handleCandidate(String sessionId, Map msg) {
+        WebRtcEndpoint webRtcEndpoint = webRtcEndpoints.get(sessionId);
+        if (webRtcEndpoint != null) {
+            String candidate = (String) msg.get("candidate");
+            int sdpMLineIndex = (Integer) msg.get("sdpMLineIndex");
+            String sdpMid = (String) msg.get("sdpMid");
+            IceCandidate iceCandidate = new IceCandidate(candidate, sdpMid, sdpMLineIndex);
+            webRtcEndpoint.addIceCandidate(iceCandidate);
+            log.info("ICE candidate added for session ID: {}", sessionId);
         }
     }
 
@@ -142,9 +147,8 @@ public class VideoStreamHandler extends TextWebSocketHandler {
 
         recorderEndpoint.addErrorListener(event -> log.error("Recorder error: {}", event.getDescription()));
 
-
-        webRtcEndpoint.connect(recorderEndpoint,MediaType.VIDEO);
-        webRtcEndpoint.connect(recorderEndpoint,MediaType.AUDIO);
+        webRtcEndpoint.connect(recorderEndpoint, MediaType.VIDEO);
+        webRtcEndpoint.connect(recorderEndpoint, MediaType.AUDIO);
 
         recorderEndpoints.put(sessionId, recorderEndpoint);
 
@@ -161,8 +165,9 @@ public class VideoStreamHandler extends TextWebSocketHandler {
             log.warn("Recorder Endpoint is not initialized for session ID: {}", sessionId);
         }
     }
-    public void sendMsg(WebSocketSession session,String msg) throws IOException {
-        String json = String.format("{\"type\":\"chat\", \"message\":\"%s\"}",msg);
+
+    public void sendMsg(WebSocketSession session, String msg) throws IOException {
+        String json = String.format("{\"type\":\"chat\", \"message\":\"%s\"}", msg.replace("\n", "\\n").replace("\r", "\\r"));
         log.info(json);
         session.sendMessage(new TextMessage(json));
     }

@@ -17,9 +17,11 @@ import java.util.UUID;
 public class UserQuestion {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
-    private UUID id;
-    @OneToOne
+    private Integer id;
+    @ManyToOne
     private User user;
-    @OneToOne
+    @ManyToOne
     private Question question;
+    @Column
+    private Integer cnt;
 }

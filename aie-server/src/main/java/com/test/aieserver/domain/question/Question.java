@@ -2,6 +2,7 @@ package com.test.aieserver.domain.question;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.checkerframework.checker.units.qual.C;
 
 import java.util.UUID;
 
@@ -21,15 +22,13 @@ public class Question {
         QuestionType(String type) {
             this.type = type;
         }
-        public String getType() {
-            return type;
-        }
     }
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
-    private UUID id;
+    private Integer id;
     @Column(nullable = false)
     private String questionContent;
     @Column(nullable = false)
     private QuestionType questionType;
+
 }
