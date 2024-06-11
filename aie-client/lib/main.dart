@@ -12,6 +12,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: Colors.black,
+        primaryColor: Colors.blueGrey[900],
+      ),
       home: VideoStreamPage(),
     );
   }
@@ -108,13 +112,13 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
           Row(
             children: [
               Expanded(
-                flex: 1613,
+                flex: 3,
                 child: Column(
                   children: [
                     Expanded(
                       flex: 1,
                       child: Container(
-                        color: Colors.blueGrey[900],
+                        color: Colors.blueGrey[800],
                         child: Center(
                           child: Text(
                             _statusMessage,
@@ -129,67 +133,82 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
                     ),
                     Expanded(
                       flex: 4,
-                      child: _questionType == '음성'
-                          ? RTCVideoView(_localRenderer)
-                          : const Center(
-                              child: Text(
-                                "주관식입니다. 채팅창에 답변을 입력하세요",
-                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      child: Container(
+                        color: Colors.grey[850],
+                        child: _questionType == '음성'
+                            ? RTCVideoView(_localRenderer)
+                            : const Center(
+                                child: Text(
+                                  "주관식입니다. 채팅창에 답변을 입력하세요",
+                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
                               ),
-                            ),
+                      ),
                     ),
                   ],
                 ),
               ),
               Expanded(
-                flex: 1000,
+                flex: 2,
                 child: Column(
                   children: [
-                    if (_questionType == '음성')
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: ElevatedButton(
-                          onPressed: _isStreaming ? _stopStreaming : () => fetchStatusMessage(_sessionId),
-                          style: ElevatedButton.styleFrom(
-                            foregroundColor: Colors.white, backgroundColor: Colors.blueGrey,
-                            textStyle: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                    Container(
+                      color: Colors.blueGrey[900],
+                      padding: const EdgeInsets.all(8.0),
+                      child: Row(
+                        children: [
+                          if (_questionType == '음성')
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: _isStreaming ? _stopStreaming : () => fetchStatusMessage(_sessionId),
+                                style: ElevatedButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  backgroundColor: Colors.teal[700],
+                                  textStyle: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: Text(_isStreaming ? '문제 제출' : '다음 문제'),
+                              ),
                             ),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                          if (_questionType != '음성' || _showNextQuestionButton)
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () => fetchStatusMessage(_sessionId),
+                                style: ElevatedButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  backgroundColor: Colors.teal[700],
+                                  textStyle: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: const Text('다음 문제'),
+                              ),
                             ),
-                          ),
-                          child: Text(_isStreaming ? '문제 제출' : '다음 문제'),
-                        ),
+                        ],
                       ),
-                    if (_questionType != '음성' || _showNextQuestionButton)
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: ElevatedButton(
-                          onPressed: () => fetchStatusMessage(_sessionId),
-                          style: ElevatedButton.styleFrom(
-                            foregroundColor: Colors.white, backgroundColor: Colors.blueGrey,
-                            textStyle: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text('다음 문제'),
-                        ),
-                      ),
+                    ),
                     Expanded(
+                      flex: 4,
                       child: Container(
-                        color: Colors.grey[200],
+                        color: Colors.grey[900],
                         child: ListView.builder(
                           itemCount: _messages.length,
                           itemBuilder: (context, index) => ListTile(
-                            title: Text(_messages[index]),
+                            title: Text(
+                              _messages[index],
+                              style: TextStyle(color: Colors.white),
+                            ),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 2.0),
                           ),
                         ),
@@ -207,14 +226,22 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
                                 maxLines: null,
                                 decoration: const InputDecoration(
                                   labelText: '답변을 입력하세요',
+                                  labelStyle: TextStyle(color: Colors.white70),
                                   border: OutlineInputBorder(),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.white54),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(color: Colors.white),
+                                  ),
                                 ),
-                                style: const TextStyle(fontSize: 16),
+                                style: const TextStyle(fontSize: 16, color: Colors.white),
+                                cursorColor: Colors.white,
                               ),
                             ),
                             IconButton(
                               icon: const Icon(Icons.send),
-                              color: Colors.blueGrey,
+                              color: Colors.teal[700],
                               onPressed: _sendMessage,
                             ),
                           ],

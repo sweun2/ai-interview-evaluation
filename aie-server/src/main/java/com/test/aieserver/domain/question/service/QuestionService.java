@@ -26,7 +26,6 @@ public class QuestionService {
     public Question constructRandQuestion(String sessionId) {
         User user = userService.makeUserIfNotPresent(sessionId);
         Optional<Question> optionalQuestion;
-
         log.info("session Id : {}", sessionId);
 
         while (true) {

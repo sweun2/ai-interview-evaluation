@@ -1,6 +1,7 @@
 package com.test.aieserver.domain.answer.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.test.aieserver.domain.answer.Answer;
 import com.test.aieserver.domain.answer.dto.OpenAIResponse;
 import com.test.aieserver.domain.question.Question;
 import com.test.aieserver.domain.question.repository.QuestionRepository;
@@ -31,30 +32,31 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AnswerService {
     private final SpeechToTextService speechToTextService;
-    private final QuestionRepository questionRepository;
     private final UserRepository userRepository;
     private final UserQuestionRepository userQuestionRepository;
 
     @Value("file:${openai.api.key}")
     private Resource apiKey;
+
     public String getApiKey() throws IOException {
         return new String(Files.readAllBytes(apiKey.getFile().toPath())).trim();
     }
 
     public String requestWithVideoFile(String sessionId) throws IOException {
-        File videoFile = new File("./video/"+sessionId+".webm");
+        File videoFile = new File("./video/" + sessionId + ".webm");
         String transcribeText = speechToTextService.transcribe(videoFile);
-        log.info("transcribed text : {}",transcribeText);
+        log.info("transcribed text : {}", transcribeText);
 
-        return requestToOpenAI(transcribeText,sessionId);
-    }
-    public String requestWithText(String text,String sessionId) throws IOException {
-        return requestToOpenAI(text,sessionId);
+        return requestToOpenAI(transcribeText, sessionId);
     }
 
-    public String requestToOpenAI(String reqMsg,String sessionId) throws IOException {
+    public String requestWithText(String text, String sessionId) throws IOException {
+        return requestToOpenAI(text, sessionId);
+    }
+
+    public String requestToOpenAI(String reqMsg, String sessionId) throws IOException {
         RestTemplate restTemplate = new RestTemplate();
-        log.info("apiKey ; {}",getApiKey());
+        log.info("apiKey : {}", getApiKey());
 
         String url = "https://api.openai.com/v1/chat/completions";
 
@@ -76,7 +78,7 @@ public class AnswerService {
         ResponseEntity<OpenAIResponse> response = restTemplate.exchange(
                 url, HttpMethod.POST, entity, OpenAIResponse.class);
         OpenAIResponse openAIResponse = response.getBody();
-        String result =  openAIResponse != null && !openAIResponse.getChoices().isEmpty()
+        String result = openAIResponse != null && !openAIResponse.getChoices().isEmpty()
                 ? openAIResponse.getChoices().get(0).getMessage().getContent()
                 : "No content received";
         log.info("result:{}", result);
@@ -86,6 +88,7 @@ public class AnswerService {
 
     private static HttpEntity<String> getStringHttpEntity(String reqMsg, UserQuestion userQuestion, HttpHeaders headers) throws IOException {
         Question question = userQuestion.getQuestion();
+        Answer answer = userQuestion.getQuestion().getAnswer();
 
         ObjectMapper objectMapper = new ObjectMapper();
         Map<String, Object> requestBodyMap = new HashMap<>();
@@ -93,11 +96,16 @@ public class AnswerService {
 
         Map<String, String> systemMessage = new HashMap<>();
         systemMessage.put("role", "system");
-        systemMessage.put("content", "You are a highly knowledgeable interview evaluator. Your task is to evaluate interview answers based on their quality, relevance, and completeness.");
+        systemMessage.put("content", "You are a helpful assistant.");
 
         Map<String, String> userMessage = new HashMap<>();
         userMessage.put("role", "user");
-        userMessage.put("content", String.format("질문: '%s'.\n응답: '%s'.\n\n이 응답이 질문에 얼마나 잘 대답했는지 평가해줘. 다음 기준에 따라 100점 만점 기준으로 점수를 매겨줘: 1) 답변의 정확성, 2) 답변의 관련성, 3) 답변의 완전성. 점수를 매긴 후, 각 기준에 대한 평가 이유를 설명해줘.\n\n형식:\n점수: [점수]\n이유:\n1) 정확성: [설명]\n2) 관련성: [설명]\n3) 완전성: [설명]\n만약 답변이 정상적이지 않다면, '답변이 불충분합니다' 라고 출력해줘.", question.getQuestionContent(), reqMsg.strip()));
+        userMessage.put("content", String.format("질문: '%s'\n응답: '%s'\n\n평가 기준: 답변의 정확성, 답변의 관련성, 답변의 완전성.\n각 기준에 대해 100점 만점 기준으로 점수를 매기고 평가 이유를 설명할 것.\n" +
+                "답변이 정상적이지 않다면 '답변이 불충분합니다'라고 출력할 것." +
+                "먼저 응답이 음성을 텍스트로 직역한 것이므로 문제에 맞게 응답을 적절히 문제에 대한 응답으로 문맥상 변환해주고 이를 평가해줘." +
+                "너가 문맥상 말이 안되는 경우, 오타가 있는 경우, 문법 오류가 있는 경우 등, 의역을 해줘. 이후 의역된 답을 기준으로 1,2,3 평가를 진행해줘." +
+                "추가로 30초 내의 답변임을 감안해서 점수를 평가해줘." +
+                "\n\n형식:\n점수: [점수]\n이유:\n1) 정확성: [설명]\n2) 관련성: [설명]\n3) 완전성: [설명]", question.getQuestionContent(), reqMsg.strip()));
 
         requestBodyMap.put("messages", new Object[]{systemMessage, userMessage});
 
@@ -105,6 +113,4 @@ public class AnswerService {
 
         return new HttpEntity<>(requestBody, headers);
     }
-
-
 }

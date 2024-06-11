@@ -1,4 +1,5 @@
 package com.test.aieserver.domain.stt;
+
 import com.google.api.gax.core.FixedCredentialsProvider;
 import com.google.api.gax.longrunning.OperationFuture;
 import com.google.auth.oauth2.GoogleCredentials;
@@ -13,7 +14,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -28,6 +28,8 @@ import java.util.List;
 public class SpeechToTextService {
     @Value("${google-credential-json}")
     private String CREDENTIALS_PATH;
+
+    private static final String GCS_BUCKET_NAME = "aie-bucket";
 
     public String transcribe(File audioFile) throws IOException {
         if (!audioFile.exists()) {
@@ -52,35 +54,35 @@ public class SpeechToTextService {
                     .setEncoding(RecognitionConfig.AudioEncoding.WEBM_OPUS)
                     .setSampleRateHertz(48000)
                     .setLanguageCode("ko-KR")
-                    .setModel("latest_short")
+                    .setModel("telephony")
+                    .addSpeechContexts(SpeechContext.newBuilder().addPhrases("특수 용어")) // 사용자 지정 사전
                     .build();
+
             Storage storage = StorageOptions.newBuilder().setCredentials(credentials).build().getService();
-            BlobInfo blobInfo = BlobInfo.newBuilder("aie-bucket", audioFile.getName()).build();
-
+            BlobInfo blobInfo = BlobInfo.newBuilder(GCS_BUCKET_NAME, audioFile.getName()).build();
             Blob blob = storage.create(blobInfo, Files.readAllBytes(audioFile.toPath()));
-            String audioUrl = "gs://aie-bucket/" + audioFile.getName();  // GCS URL 형식
+            String audioUrl = "gs://"+ GCS_BUCKET_NAME + "/" + audioFile.getName();
             log.info("Audio file uploaded to GCS at URL: {}", audioUrl);
-
-            RecognitionConfig config = RecognitionConfig.newBuilder()
-                    .setEncoding(RecognitionConfig.AudioEncoding.WEBM_OPUS)
-                    .setSampleRateHertz(48000)
-                    .setLanguageCode("ko-KR")
-                    .setModel("latest_short")
-                    .build();
 
             RecognitionAudio audio = RecognitionAudio.newBuilder()
                     .setUri(audioUrl)
                     .build();
 
             OperationFuture<LongRunningRecognizeResponse, LongRunningRecognizeMetadata> response =
-                    speechClient.longRunningRecognizeAsync(config, audio);
+                    speechClient.longRunningRecognizeAsync(recognitionConfig, audio);
 
-            LongRunningRecognizeResponse reply = response.get(); // 여기를 수정
+            LongRunningRecognizeResponse reply = response.get();
             if (response.isDone()) {
+                StringBuilder transcription = new StringBuilder();
                 List<SpeechRecognitionResult> results = reply.getResultsList();
-                if (!results.isEmpty()) {
-                    SpeechRecognitionResult result = results.get(0);
-                    return result.getAlternatives(0).getTranscript();
+                for (SpeechRecognitionResult result : results) {
+                    for (SpeechRecognitionAlternative alternative : result.getAlternativesList()) {
+                        transcription.append(alternative.getTranscript()).append("\n");
+                    }
+                }
+                if (!transcription.isEmpty()) {
+                    log.info(transcription.toString().trim());
+                    return transcription.toString().trim();
                 } else {
                     log.info("No transcription result found");
                     return "";

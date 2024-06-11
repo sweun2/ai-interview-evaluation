@@ -14,7 +14,6 @@ import java.util.Optional;
 @Repository
 public interface UserQuestionRepository extends JpaRepository<UserQuestion,Integer> {
     Optional<UserQuestion> findByUserAndQuestion(@NonNull User user, @NonNull Question question);
-    Optional<UserQuestion> findByUser(@NonNull User user);
 
     @Query(value = "SELECT * FROM UserQuestion uq WHERE uq.user_id = :userId ORDER BY cnt DESC LIMIT 1", nativeQuery = true)
     Optional<UserQuestion> findByHighestCnt(@Param("userId") Integer userId);

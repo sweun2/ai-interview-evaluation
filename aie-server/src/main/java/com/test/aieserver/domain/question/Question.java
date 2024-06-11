@@ -1,5 +1,6 @@
 package com.test.aieserver.domain.question;
 
+import com.test.aieserver.domain.answer.Answer;
 import jakarta.persistence.*;
 import lombok.*;
 import org.checkerframework.checker.units.qual.C;
@@ -30,5 +31,6 @@ public class Question {
     private String questionContent;
     @Column(nullable = false)
     private QuestionType questionType;
-
+    @OneToOne
+    private Answer answer;
 }
