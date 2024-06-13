@@ -24,4 +24,6 @@ public class UserQuestion {
     private Question question;
     @Column
     private Integer cnt;
+    @Column
+    private Boolean nowAnswering;
 }

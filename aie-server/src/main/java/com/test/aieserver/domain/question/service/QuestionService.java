@@ -40,13 +40,19 @@ public class QuestionService {
                 break;
             }
         }
-
+        if(!userQuestionRepository.findByUser(user).isEmpty()){
+            userQuestionRepository.findByUser(user).forEach(userQuestion -> {
+                userQuestion.setNowAnswering(false);
+                userQuestionRepository.save(userQuestion);
+            });
+        }
         UserQuestion userQuestion = UserQuestion.builder()
                 .user(user)
                 .question(optionalQuestion.get())
                 .cnt(userQuestionRepository.findByHighestCnt(user.getId())
                         .map(UserQuestion::getCnt)
                         .orElse(0) + 1)
+                .nowAnswering(true)
                 .build();
 
         user.getUserQuestionSet().add(userQuestion);

@@ -9,13 +9,15 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface UserQuestionRepository extends JpaRepository<UserQuestion,Integer> {
     Optional<UserQuestion> findByUserAndQuestion(@NonNull User user, @NonNull Question question);
-
+    List<UserQuestion> findByUser(User user);
     @Query(value = "SELECT * FROM UserQuestion uq WHERE uq.user_id = :userId ORDER BY cnt DESC LIMIT 1", nativeQuery = true)
     Optional<UserQuestion> findByHighestCnt(@Param("userId") Integer userId);
 
+    Optional<UserQuestion> findByUserAndNowAnswering(User user, Boolean nowAnswering);
 }

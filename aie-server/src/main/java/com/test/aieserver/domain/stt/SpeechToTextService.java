@@ -8,18 +8,25 @@ import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
-import com.google.protobuf.BoolValue;
 import com.google.protobuf.ByteString;
+import com.test.aieserver.domain.question.Question;
+import com.test.aieserver.domain.user.User;
+import com.test.aieserver.domain.user.repository.UserRepository;
+import com.test.aieserver.domain.userquestion.UserQuestion;
+import com.test.aieserver.domain.userquestion.repository.UserQuestionRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 
 @RequiredArgsConstructor
@@ -27,12 +34,20 @@ import java.util.List;
 @Slf4j
 @Transactional
 public class SpeechToTextService {
+    private final UserQuestionRepository userQuestionRepository;
+    private final UserRepository userRepository;
     @Value("${google-credential-json}")
     private String CREDENTIALS_PATH;
 
     private static final String GCS_BUCKET_NAME = "aie-bucket";
 
-    public String transcribe(File audioFile) throws IOException {
+    public String transcribe(File audioFile,String sessionId) throws IOException {
+        User user = userRepository.findByNickname(sessionId).orElseThrow(
+                () -> new IllegalArgumentException("User not found with nickname: " + sessionId));
+        UserQuestion userQuestion = userQuestionRepository.findByUserAndNowAnswering(user, true).orElseThrow(
+                () -> new IllegalArgumentException("No question found for user with nickname: " + sessionId));
+        Question question = userQuestion.getQuestion();
+
         if (!audioFile.exists()) {
             throw new IOException("Audio file does not exist at the specified path.");
         }
@@ -50,59 +65,30 @@ public class SpeechToTextService {
             RecognitionAudio recognitionAudio = RecognitionAudio.newBuilder()
                     .setContent(audioData)
                     .build();
+            List<String> phrases = new ArrayList<>();
+            try (BufferedReader br = new BufferedReader(new FileReader(question.getTitle()+".txt"))) {
+                String phrase;
+                while ((phrase = br.readLine()) != null) {
+                    phrases.add(phrase);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
 
             RecognitionConfig recognitionConfig = RecognitionConfig.newBuilder()
                     .setEncoding(RecognitionConfig.AudioEncoding.WEBM_OPUS)
                     .setSampleRateHertz(48000)
                     .setLanguageCode("ko-KR")
+                    .addAlternativeLanguageCodes("en-US")
                     .setModel("latest_long")
                     .setEnableAutomaticPunctuation(true)
-                    .addSpeechContexts(SpeechContext.newBuilder()
-                            .addPhrases("CORS")
-                            .addPhrases("Cross-Origin Resource Sharing")
-                            .addPhrases("웹 애플리케이션")
-                            .addPhrases("리소스 요청")
-                            .addPhrases("보안 기능")
-                            .addPhrases("웹 브라우저")
-                            .addPhrases("도메인")
-                            .addPhrases("요청 차단")
-                            .addPhrases("응답 헤더")
-                            .addPhrases("Access-Control-Allow-Origin")
-                            .addPhrases("Access-Control-Allow-Credentials")
-                            .addPhrases("접근 가능")
-                            .addPhrases("Access-Control-Allow-Methods")
-                            .addPhrases("Access-Control-Allow-Headers")
-                            .addPhrases("보안성")
-                            .addPhrases("리소스 활용")
-                            .addPhrases("HTTP 요청")
-                            .addPhrases("클라이언트")
-                            .addPhrases("서버")
-                            .addPhrases("네트워크")
-                            .addPhrases("프로토콜")
-                            .addPhrases("GET 요청")
-                            .addPhrases("POST 요청")
-                            .addPhrases("PUT 요청")
-                            .addPhrases("DELETE 요청")
-                            .addPhrases("헤더")
-                            .addPhrases("응답 코드")
-                            .addPhrases("JSON")
-                            .addPhrases("XML")
-                            .addPhrases("AJAX")
-                            .addPhrases("프록시")
-                            .addPhrases("브라우저 보안")
-                            .addPhrases("웹 개발")
-                            .addPhrases("API")
-                            .addPhrases("HTTPS")
-                            .addPhrases("인증")
-                            .addPhrases("토큰")
-                    .build())
-            .build();
-
+                    .addSpeechContexts(SpeechContext.newBuilder().addAllPhrases(phrases).build())
+                    .build();
 
             Storage storage = StorageOptions.newBuilder().setCredentials(credentials).build().getService();
             BlobInfo blobInfo = BlobInfo.newBuilder(GCS_BUCKET_NAME, audioFile.getName()).build();
             Blob blob = storage.create(blobInfo, Files.readAllBytes(audioFile.toPath()));
-            String audioUrl = "gs://"+ GCS_BUCKET_NAME + "/" + audioFile.getName();
+            String audioUrl = "gs://" + GCS_BUCKET_NAME + "/" + audioFile.getName();
             log.info("Audio file uploaded to GCS at URL: {}", audioUrl);
 
             RecognitionAudio audio = RecognitionAudio.newBuilder()

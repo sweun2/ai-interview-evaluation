@@ -33,4 +33,6 @@ public class Question {
     private QuestionType questionType;
     @OneToOne
     private Answer answer;
+    @Column
+    private String title;
 }

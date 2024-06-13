@@ -44,7 +44,7 @@ public class AnswerService {
 
     public String requestWithVideoFile(String sessionId) throws IOException {
         File videoFile = new File("./video/" + sessionId + ".webm");
-        String transcribeText = speechToTextService.transcribe(videoFile);
+        String transcribeText = speechToTextService.transcribe(videoFile,sessionId);
         log.info("transcribed text : {}", transcribeText);
 
         return requestToOpenAI(transcribeText, sessionId);

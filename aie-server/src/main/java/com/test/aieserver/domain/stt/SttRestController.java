@@ -19,14 +19,5 @@ import java.io.IOException;
 @RequestMapping("stt")
 @RequiredArgsConstructor
 public class SttRestController {
-
     private final SpeechToTextService sttService;
-
-    @PostMapping(value = "/audio", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<String> handleAudioMessage(@RequestParam("audioFile") MultipartFile audioFile) throws IOException, IOException {
-
-        String transcribe = sttService.transcribe((File) audioFile);
-
-        return ResponseEntity.ok().body(transcribe);
-    }
 }

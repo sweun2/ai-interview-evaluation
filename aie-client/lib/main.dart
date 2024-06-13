@@ -329,6 +329,7 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
           _messages.add(decodedMessage['message']);
           _isLoading = false;
         });
+        
         Future.microtask(() => sendAck(decodedMessage['messageId']));
         break;
       case 'chatAck':
@@ -484,6 +485,15 @@ void sendAck(String messageId) {
 
     setState(() {
       _isStreaming = false;
+    });
+    
+        Timer(const Duration(seconds: 10), () {
+      if (_isLoading) {
+        setState(() {
+          _isLoading = false;
+        });
+        print('Loading state set to false after 10 seconds.');
+      }
     });
   }
 }
