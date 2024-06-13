@@ -8,6 +8,7 @@ import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
+import com.google.protobuf.BoolValue;
 import com.google.protobuf.ByteString;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -54,9 +55,49 @@ public class SpeechToTextService {
                     .setEncoding(RecognitionConfig.AudioEncoding.WEBM_OPUS)
                     .setSampleRateHertz(48000)
                     .setLanguageCode("ko-KR")
-                    .setModel("telephony")
-                    .addSpeechContexts(SpeechContext.newBuilder().addPhrases("특수 용어")) // 사용자 지정 사전
-                    .build();
+                    .setModel("latest_long")
+                    .setEnableAutomaticPunctuation(true)
+                    .addSpeechContexts(SpeechContext.newBuilder()
+                            .addPhrases("CORS")
+                            .addPhrases("Cross-Origin Resource Sharing")
+                            .addPhrases("웹 애플리케이션")
+                            .addPhrases("리소스 요청")
+                            .addPhrases("보안 기능")
+                            .addPhrases("웹 브라우저")
+                            .addPhrases("도메인")
+                            .addPhrases("요청 차단")
+                            .addPhrases("응답 헤더")
+                            .addPhrases("Access-Control-Allow-Origin")
+                            .addPhrases("Access-Control-Allow-Credentials")
+                            .addPhrases("접근 가능")
+                            .addPhrases("Access-Control-Allow-Methods")
+                            .addPhrases("Access-Control-Allow-Headers")
+                            .addPhrases("보안성")
+                            .addPhrases("리소스 활용")
+                            .addPhrases("HTTP 요청")
+                            .addPhrases("클라이언트")
+                            .addPhrases("서버")
+                            .addPhrases("네트워크")
+                            .addPhrases("프로토콜")
+                            .addPhrases("GET 요청")
+                            .addPhrases("POST 요청")
+                            .addPhrases("PUT 요청")
+                            .addPhrases("DELETE 요청")
+                            .addPhrases("헤더")
+                            .addPhrases("응답 코드")
+                            .addPhrases("JSON")
+                            .addPhrases("XML")
+                            .addPhrases("AJAX")
+                            .addPhrases("프록시")
+                            .addPhrases("브라우저 보안")
+                            .addPhrases("웹 개발")
+                            .addPhrases("API")
+                            .addPhrases("HTTPS")
+                            .addPhrases("인증")
+                            .addPhrases("토큰")
+                    .build())
+            .build();
+
 
             Storage storage = StorageOptions.newBuilder().setCredentials(credentials).build().getService();
             BlobInfo blobInfo = BlobInfo.newBuilder(GCS_BUCKET_NAME, audioFile.getName()).build();

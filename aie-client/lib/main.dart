@@ -1,3 +1,4 @@
+import 'dart:async'; // Timer를 사용하기 위해 import
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -27,6 +28,7 @@ class VideoStreamPage extends StatefulWidget {
 }
 
 class _VideoStreamPageState extends State<VideoStreamPage> {
+  final Map<String, Timer> _messageTimers = {}; // Track timers for each message
   final _channel = HtmlWebSocketChannel.connect('ws://localhost:8080/stream');
   RTCPeerConnection? _peerConnection;
   MediaStream? _localStream;
@@ -36,9 +38,11 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
   bool _isLoading = false;
   final TextEditingController _textController = TextEditingController();
   final List<String> _messages = [];
+  final List<String> _receivedMessageIds = [];
   String _statusMessage = "Loading...";
   String _sessionId = "";
   String _questionType = "text";
+  Timer? _timer; // 주기적으로 상태를 확인하기 위한 Timer
 
   @override
   void initState() {
@@ -49,6 +53,27 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _promptStartStreaming();
     });
+
+  }
+
+  void _checkChatMessages() {
+    setState(() {
+      print('Checking chat messages...');
+      print(_messages);
+      // _isLoading이 true 상태로 너무 오래 있으면 false로 설정
+      if (_isLoading && _messages.isNotEmpty) {
+        _isLoading = false;
+        print('Loading state set to false due to chat message presence.');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel(); // Timer 취소
+    _localRenderer.dispose();
+    _peerConnection?.dispose();
+    super.dispose();
   }
 
   Future<void> fetchStatusMessage(String sessionId) async {
@@ -207,7 +232,7 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
                           itemBuilder: (context, index) => ListTile(
                             title: Text(
                               _messages[index],
-                              style: TextStyle(color: Colors.white),
+                              style: const TextStyle(color: Colors.white),
                             ),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 2.0),
                           ),
@@ -276,13 +301,20 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
 
   void onMessage(message) {
     var decodedMessage = json.decode(message);
+
+    if (decodedMessage['messageId'] != null && _receivedMessageIds.contains(decodedMessage['messageId'])) {
+        print('Duplicate message received: ${decodedMessage['messageId']}');
+        return;
+    }
+
+    print('Received message: $decodedMessage');
     switch (decodedMessage['type']) {
       case 'answer':
         _handleSDPAnswer(decodedMessage['sdpAnswer']).then((_) {
           setState(() {
             _sessionId = decodedMessage['sessionId'];
           });
-          fetchStatusMessage(_sessionId);
+          Future.microtask(() => fetchStatusMessage(_sessionId));
         });
         break;
       case 'candidate':
@@ -290,18 +322,38 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
         break;
       case 'chat':
         setState(() {
-          print(decodedMessage['message']);
+          if (decodedMessage['messageId'] != null) {
+            _receivedMessageIds.add(decodedMessage['messageId']);
+          }
+          print('Chat message received: ${decodedMessage['message']}');
           _messages.add(decodedMessage['message']);
           _isLoading = false;
         });
+        Future.microtask(() => sendAck(decodedMessage['messageId']));
+        break;
+      case 'chatAck':
+        String messageId = decodedMessage['messageId'];
+        if (_messageTimers.containsKey(messageId)) {
+          _messageTimers[messageId]?.cancel();
+          _messageTimers.remove(messageId);
+        }
         break;
       default:
         setState(() {
+          print('Unknown message type: ${decodedMessage['type']}');
           _isLoading = false;
         });
         break;
     }
   }
+void sendAck(String messageId) {
+    print('Sending ACK for messageId: $messageId');
+    _channel.sink.add(json.encode({
+        'type': 'chatAck',
+        'messageId': messageId
+    }));
+}
+  
 
   void onError(error) {
     print('Error: $error');
@@ -316,29 +368,53 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
       _isLoading = false;
     });
   }
-
   void _sendMessage() {
     if (_textController.text.isNotEmpty) {
+      String messageId = DateTime.now().millisecondsSinceEpoch.toString();
+      String messageText = _textController.text;
+
       setState(() {
-        _messages.add("나: ${_textController.text}");
+        _messages.add("나: $messageText");
         _isLoading = true;
       });
+
       _channel.sink.add(json.encode({
         'type': 'chat',
-        'message': _textController.text,
+        'message': messageText,
+        'messageId': messageId
       }));
+
       _textController.clear();
       setState(() {
         _showNextQuestionButton = true;
       });
+
+      // Set a timer to wait for ack
+      _messageTimers[messageId] = Timer(const Duration(seconds: 5), () {
+        // Retry sending the message if no ack received
+        _sendMessageRetry(messageText, messageId);
+      });
     }
   }
+  void _sendMessageRetry(String messageText, String messageId) {
+    _channel.sink.add(json.encode({
+      'type': 'chat',
+      'message': messageText,
+      'messageId': messageId
+    }));
 
+    // Reset the timer to wait for ack again
+    _messageTimers[messageId] = Timer(const Duration(seconds: 5), () {
+      // Retry sending the message if no ack received
+      _sendMessageRetry(messageText, messageId);
+    });
+  }
   Future<void> _handleSDPAnswer(String sdpAnswer) async {
     RTCSessionDescription description = RTCSessionDescription(sdpAnswer, 'answer');
     await _peerConnection!.setRemoteDescription(description);
     _channel.sink.add(json.encode({'command': 'start'}));
   }
+  
 
   void _handleRemoteCandidate(Map<String, dynamic> candidateMap) {
     RTCIceCandidate candidate = RTCIceCandidate(
@@ -409,12 +485,5 @@ class _VideoStreamPageState extends State<VideoStreamPage> {
     setState(() {
       _isStreaming = false;
     });
-  }
-
-  @override
-  void dispose() {
-    _localRenderer.dispose();
-    _peerConnection?.dispose();
-    super.dispose();
   }
 }

@@ -13,7 +13,11 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-
+import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @RequiredArgsConstructor
 public class VideoStreamHandler extends TextWebSocketHandler {
@@ -23,6 +27,9 @@ public class VideoStreamHandler extends TextWebSocketHandler {
     private final Map<String, WebRtcEndpoint> webRtcEndpoints = new HashMap<>();
     private final Map<String, RecorderEndpoint> recorderEndpoints = new HashMap<>();
     private final AnswerService answerService;
+
+    // 메시지 ID를 저장할 맵
+    private final Map<String, Boolean> ackMap = new ConcurrentHashMap<>();
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -78,10 +85,19 @@ public class VideoStreamHandler extends TextWebSocketHandler {
             log.info("Stop msg response");
         } else if ("chat".equals(type)) {
             String messageText = (String) msg.get("message");
+            String messageId = (String) msg.get("messageId");
             log.info("Chat message received: {}", messageText);
             String answer = answerService.requestWithText(messageText, sessionId);
             sendMsg(session, answer);
+
+            // Send chat acknowledgment
+            String ackMsg = String.format("{\"type\":\"chatAck\", \"messageId\":\"%s\"}", messageId);
+            session.sendMessage(new TextMessage(ackMsg));
             log.info("Chat msg response");
+        } else if ("chatAck".equals(type)) {
+            String messageId = (String) msg.get("messageId");
+            ackMap.put(messageId, true);
+            log.info("ACK received for message ID: {}", messageId);
         }
     }
 
@@ -166,9 +182,33 @@ public class VideoStreamHandler extends TextWebSocketHandler {
         }
     }
 
-    public void sendMsg(WebSocketSession session, String msg) throws IOException {
-        String json = String.format("{\"type\":\"chat\", \"message\":\"%s\"}", msg.replace("\n", "\\n").replace("\r", "\\r"));
-        log.info(json);
-        session.sendMessage(new TextMessage(json));
+    public void sendMsg(WebSocketSession session, String msg) {
+        try {
+            String messageId = UUID.randomUUID().toString();
+            ackMap.put(messageId, false);
+            String json = String.format("{\"type\":\"chat\", \"message\":\"%s\", \"messageId\":\"%s\"}", msg.replace("\n", "\\n").replace("\r", "\\r"), messageId);
+            log.info(json);
+            session.sendMessage(new TextMessage(json));
+
+            // 일정 시간 후 ACK를 확인하는 작업을 예약
+            scheduleAckCheck(session, messageId, msg, 5000); // 5초 후 ACK를 확인
+        } catch (Exception e) {
+            log.error("메시지 전송 오류: {}", e.getMessage());
+        }
+    }
+
+    private void scheduleAckCheck(WebSocketSession session, String messageId, String msg, long delay) {
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        scheduler.schedule(() -> {
+            // ACK를 받지 못한 경우 메시지를 다시 전송
+            if (!ackReceived(messageId)) {
+                log.info("메시지 재전송: {}", messageId);
+                sendMsg(session, msg);
+            }
+        }, delay, TimeUnit.MILLISECONDS);
+    }
+
+    private boolean ackReceived(String messageId) {
+        return ackMap.getOrDefault(messageId, false);
     }
 }
